@@ -145,7 +145,7 @@ docker exec -it dev-postgres psql -U $POSTGRES_TAXI_USER -d yellowtaxi -c "SELEC
 
 ## 👨‍💻 Author
 
-**Uzair Khan**
+**Muhammad Uzair Khan**
 
 Data Analyst | Python · SQL · Airflow · Docker · PostgreSQL · Power BI
 

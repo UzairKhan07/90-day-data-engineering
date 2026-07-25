@@ -206,7 +206,7 @@ If you'd like to improve this project, feel free to fork the repository and subm
 
 ## 👨‍💻 Author
 
-**Uzair Khan**
+**Muhammad Uzair Khan**
 
 Data Engineer | Python | SQL | PostgreSQL | Docker | ETL | Data Warehousing | Power BI
 
