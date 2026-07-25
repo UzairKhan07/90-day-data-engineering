@@ -23,7 +23,7 @@ Build production-adjacent habits early: containerized environments, orchestrated
 
 ## 👨‍💻 Author
 
-**Uzair Khan**
+**Muhammad Uzair Khan**
 
 Data Analyst | Python · SQL · Airflow · Docker · PostgreSQL · Power BI
 
