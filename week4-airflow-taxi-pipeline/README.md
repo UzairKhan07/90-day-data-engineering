@@ -1,154 +1,307 @@
-# 🌀 NYC Taxi Pipeline — Airflow Orchestration
+# 🚖 NYC Taxi ETL Pipeline with Apache Airflow
 
-Extends the [Week 3 Docker + PostgreSQL pipeline](../Week%203%20Docker%20+%20PostgreSQL) by replacing a manually-run Python script with an Apache Airflow DAG: download → create table → bulk load, fully orchestrated, retried, and logged per task.
+A production-inspired Data Engineering project built using **Apache Airflow, PostgreSQL, Docker, Polars, and Python**.
 
----
+The pipeline downloads the NYC Yellow Taxi dataset from Kaggle, performs staged ingestion, data quality validation, transformations, and loads the cleaned data into PostgreSQL using a **Medallion-inspired architecture**.
 
-## 📌 Overview
-
-Week 3 proved the core mechanic (bulk-loading NYC Yellow Taxi CSVs into Postgres via `COPY`). Week 4 wraps that logic in Airflow so it's:
-
-- **Orchestrated** — explicit task dependencies instead of top-to-bottom script execution
-- **Observable** — per-task logs, retries, and status in the Airflow UI instead of console output
-- **Isolated** — Airflow's own metadata lives in a separate Postgres instance from the actual taxi data
-
-### Pipeline Workflow
-
-1. `download_dataset` — pulls the NYC Yellow Taxi dataset from Kaggle into a mounted volume
-2. `ensure_table` — creates the `trips` table if it doesn't exist
-3. `load_files` — streams each CSV into Postgres via `COPY`, with per-file commit/rollback and row-count logging
+This project is part of my **90-Day Data Engineering Roadmap**, where each week focuses on learning real-world tools and engineering practices used in modern data platforms.
 
 ---
 
-## 🏗️ Architecture
+# 📖 Overview
+
+This project extends the Week 3 PostgreSQL ETL pipeline by introducing **Apache Airflow** for orchestration and significantly refactoring the ingestion workflow.
+
+Unlike the original implementation, this version introduces:
+
+- Apache Airflow orchestration
+- Streaming ingestion using Polars
+- Hash-based idempotent loading
+- Bronze & Silver data layers
+- Automated Data Quality checks
+- Modular ETL stages
+- Dockerized development environment
+
+The goal is to build an ETL pipeline that resembles production engineering practices rather than a simple data loading script.
+
+---
+
+# ✨ Features
+
+- ✅ Apache Airflow DAG orchestration
+- ✅ Dockerized deployment
+- ✅ PostgreSQL data warehouse
+- ✅ Kaggle dataset integration
+- ✅ Streaming CSV processing using Polars
+- ✅ Hash-based idempotent loading
+- ✅ Bronze Layer implementation
+- ✅ Silver Layer transformations
+- ✅ Data Quality validation for both layers
+- ✅ Automatic retries and task logging
+- ✅ Custom Airflow Docker image
+- ✅ Environment variables managed with `.env`
+
+---
+
+# 🏛️ Pipeline Architecture
 
 ```text
                     Kaggle Dataset
                           │
                           ▼
-              download_dataset (PythonOperator)
+                 Download Dataset
                           │
                           ▼
-               ensure_table (PostgresHook)
+               Bronze Layer (Raw)
+         -----------------------------
+         trips_staging
+                │
+                ▼
+              trips
+(Hash-based deduplication & Idempotent Load)
+                          │
+                Bronze DQ Checks
                           │
                           ▼
-                load_files (COPY, streamed)
+             Silver Layer (Processed)
+         -----------------------------
+               trips_clean
+      Business-friendly transformations
+                          │
+                Silver DQ Checks
                           │
                           ▼
-                  postgres-taxi :: trips
+                  PostgreSQL
+
+      Gold Layer (Planned Future Enhancement)
 ```
 
-Two isolated Postgres instances run side by side:
+---
 
-| Instance | Purpose | Port |
-|---|---|---|
-| `postgres-airflow` | Airflow's own metadata (DAG runs, task state, users) | 5433 |
-| `postgres-taxi` | The actual `trips` data | 5432 |
+# ⚙️ Pipeline Workflow
+
+The Airflow DAG executes the following tasks:
+
+1. Download the NYC Yellow Taxi dataset from Kaggle.
+2. Create all required database tables.
+3. Stream CSV files into the staging table using Polars.
+4. Load only new records into the Bronze table using MD5 hash-based deduplication.
+5. Execute Bronze layer Data Quality checks.
+6. Transform Bronze data into the Silver layer.
+7. Execute Silver layer Data Quality checks.
+8. Log pipeline execution metadata.
 
 ---
 
-## 🚀 Features
+# 🛠️ Tech Stack
 
-- ✅ Dockerized Airflow (webserver + scheduler + one-shot init service)
-- ✅ Automated Kaggle dataset download inside the DAG
-- ✅ Bulk CSV ingestion via Postgres `COPY` (streamed, not loaded into memory)
-- ✅ Per-task retries and structured logging
-- ✅ Secrets externalized to `.env` (nothing sensitive committed)
-- ✅ Healthchecks + `service_completed_successfully` gating so services don't race each other on startup
+| Category | Technology |
+|-----------|------------|
+| Language | Python |
+| Workflow | Apache Airflow |
+| Database | PostgreSQL |
+| Data Processing | Polars |
+| Containerization | Docker & Docker Compose |
+| Dataset | Kaggle NYC Yellow Taxi Dataset |
+| Database Client | pgAdmin |
+| Version Control | Git & GitHub |
+| Operating System | Ubuntu (WSL2) |
 
 ---
 
-## 🛠️ Tech Stack
-
-Apache Airflow · PostgreSQL · Docker · Docker Compose · psycopg2 · kagglehub · pgAdmin
-
----
-
-## 📂 Project Structure
+# 📂 Project Structure
 
 ```text
 week4-airflow-taxi-pipeline/
+│
 ├── dags/
 │   └── nyc_taxi_etl_dag.py
-├── data/              # gitignored — populated at runtime
-├── logs/              # gitignored
+│
+├── data/
+├── logs/
 ├── plugins/
+│
+├── Dockerfile
 ├── docker-compose.yml
+├── requirements.txt
 ├── .env.example
-├── .gitignore
-└── README.md
+├── README.md
 ```
 
 ---
 
-## ⚙️ Setup
+# 🚀 Getting Started
 
-### 1. Clone and configure
+## Clone the Repository
 
 ```bash
 git clone https://github.com/UzairKhan07/90-day-data-engineering.git
+
 cd 90-day-data-engineering/week4-airflow-taxi-pipeline
+```
+
+---
+
+## Configure Environment Variables
+
+```bash
 cp .env.example .env
 ```
 
-Fill in `.env` with your own Postgres/pgAdmin/Airflow admin credentials and your [Kaggle API token](https://www.kaggle.com/settings) (Account → Create New API Token).
+Configure:
 
-### 2. Start everything
+- Airflow credentials
+- PostgreSQL credentials
+- pgAdmin credentials
+- Kaggle API credentials
 
-```bash
-docker-compose up -d
-```
+---
 
-`airflow-init` runs once (migrates the metadata DB, creates the admin user), then exits. The webserver and scheduler wait for it to finish before starting.
-
-### 3. Verify
-
-```bash
-docker-compose logs airflow-init
-docker ps
-```
-
-### 4. Access
-
-- Airflow UI: [http://localhost:8081](http://localhost:8081) (login from your `.env`)
-- pgAdmin: [http://localhost:8080](http://localhost:8080)
-
-### 5. Run the DAG
-
-Enable `nyc_taxi_etl` in the Airflow UI and trigger it manually. It's not scheduled (`schedule_interval=None`) since it's pulling a static historical dataset, not a recurring feed.
-
-### 6. Verify the load
+## Build the Custom Airflow Image
 
 ```bash
-docker exec -it dev-postgres psql -U $POSTGRES_TAXI_USER -d yellowtaxi -c "SELECT COUNT(*) FROM trips;"
+docker compose build
 ```
 
 ---
 
-## ⚠️ Known Limitations
+## Start the Services
 
-- **Not idempotent** — re-running the DAG duplicates rows. No upsert or dedup logic yet.
-- **Full dataset download** — `download_dataset` pulls the entire multi-year Kaggle dataset (several GB) rather than a single file. Fine for a learning exercise; worth scoping down for repeated runs.
-- **`_PIP_ADDITIONAL_REQUIREMENTS`** installs Python deps at container startup — convenient for development, but slow and non-persistent. A custom Airflow image with deps baked in is the production-grade approach.
-
----
-
-## 🔮 Future Improvements
-
-- [ ] Upsert logic (`ON CONFLICT`) for idempotent reruns
-- [ ] Data quality checks between load and table (nulls, ranges) as a dedicated task
-- [ ] Custom Docker image instead of `_PIP_ADDITIONAL_REQUIREMENTS`
-- [ ] Dynamic task mapping — one mapped task instance per CSV file instead of a single loop
-- [ ] CI (GitHub Actions) to lint the DAG and validate `docker-compose config` on push
+```bash
+docker compose up -d
+```
 
 ---
 
-## 👨‍💻 Author
+## Access the Services
+
+| Service | URL |
+|----------|-----|
+| Airflow UI | http://localhost:8081 |
+| pgAdmin | http://localhost:8080 |
+
+---
+
+## Run the Pipeline
+
+Enable the **nyc_taxi_etl** DAG from the Airflow UI and trigger it manually.
+
+Airflow will orchestrate the entire ETL process from ingestion through transformation and validation.
+
+---
+
+# 🔄 Version 2 Improvements
+
+Compared to the original Week 4 implementation, this version introduces major architectural improvements.
+
+### Engineering Improvements
+
+- Refactored into a Medallion-inspired architecture
+- Implemented Bronze and Silver layers
+- Introduced staging tables
+- Added hash-based idempotent loading
+- Added file checksum tracking
+- Added pipeline execution logging
+- Added Bronze Data Quality validation
+- Added Silver Data Quality validation
+- Migrated to Polars streaming for efficient CSV processing
+- Built a custom Airflow Docker image
+- Improved project modularity and maintainability
+
+---
+
+# ⚡ Development Environment Migration
+
+During development, Docker and Apache Airflow experienced significant performance degradation when the project was stored on the Windows-mounted filesystem.
+
+To improve filesystem performance and eliminate Linux permission inconsistencies, development was migrated to the native **Ubuntu (WSL2)** filesystem.
+
+### Benefits
+
+- Faster Docker file I/O
+- Faster DAG execution
+- Better Linux file permission handling
+- More stable Airflow scheduler
+- Development environment closer to production Linux deployments
+
+---
+
+# 🧠 Engineering Challenges
+
+## Docker Performance
+
+**Challenge**
+
+Running Docker volumes from the Windows filesystem resulted in slower Airflow execution.
+
+**Solution**
+
+Migrated development to the native Ubuntu (WSL2) filesystem.
+
+---
+
+## Linux File Permissions
+
+**Challenge**
+
+Airflow containers initially failed to write logs and mounted volumes because of permission conflicts.
+
+**Solution**
+
+Updated volume permissions and aligned container user ownership.
+
+---
+
+## Idempotent ETL
+
+**Challenge**
+
+Re-running the pipeline could duplicate records.
+
+**Solution**
+
+Implemented MD5-based trip hashing together with PostgreSQL `ON CONFLICT DO NOTHING` to safely support repeated DAG executions.
+
+---
+
+## Efficient Large File Processing
+
+**Challenge**
+
+Loading multi-GB CSV files into memory is inefficient.
+
+**Solution**
+
+Used Polars LazyFrame together with streaming CSV writes before bulk loading into PostgreSQL via `COPY`.
+
+---
+
+# 📈 Future Improvements
+
+- Implement the **Gold Layer** for business-ready analytical datasets and reporting
+- Dynamic Task Mapping (one Airflow task per dataset)
+- Great Expectations for advanced Data Quality validation
+- Incremental processing for newly arriving datasets
+- Automated unit testing for DAGs
+- CI/CD using GitHub Actions
+- Data lineage and metadata tracking
+- Monitoring and alerting
+- Cloud deployment (AWS/GCP/Azure)
+
+---
+
+# 👨‍💻 Author
 
 **Muhammad Uzair Khan**
 
-Data Analyst | Python · SQL · Airflow · Docker · PostgreSQL · Power BI
+Business Analyst • Aspiring Data Engineer • Future AI Engineer
 
-GitHub: [github.com/UzairKhan07](https://github.com/UzairKhan07)
+GitHub: **https://github.com/UzairKhan07**
 
-Part of a 90-day self-directed Data Engineering roadmap.
+---
+
+# 📚 90-Day Data Engineering Roadmap
+
+This project is part of my personal **90-Day Data Engineering Roadmap**.
+
+The objective of this roadmap is to transition from Business Intelligence and Analytics into Data Engineering by building increasingly production-inspired projects while learning industry-standard tools, architectures, and engineering practices.
