@@ -279,14 +279,6 @@ Used Polars LazyFrame together with streaming CSV writes before bulk loading int
 # 📈 Future Improvements
 
 - Implement the **Gold Layer** for business-ready analytical datasets and reporting
-- Dynamic Task Mapping (one Airflow task per dataset)
-- Great Expectations for advanced Data Quality validation
-- Incremental processing for newly arriving datasets
-- Automated unit testing for DAGs
-- CI/CD using GitHub Actions
-- Data lineage and metadata tracking
-- Monitoring and alerting
-- Cloud deployment (AWS/GCP/Azure)
 
 ---
 
@@ -305,3 +297,19 @@ GitHub: **https://github.com/UzairKhan07**
 This project is part of my personal **90-Day Data Engineering Roadmap**.
 
 The objective of this roadmap is to transition from Business Intelligence and Analytics into Data Engineering by building increasingly production-inspired projects while learning industry-standard tools, architectures, and engineering practices.
+
+## Airflow Pipeline
+
+![Airflow Graph](assets/airflow-graph.png)
+
+## Gantt View
+
+![Gantt](assets/airflow-gantt.png)
+
+## PostgreSQL Tables
+
+![Tables](assets/postgres-tables.png)
+
+## Sample Transformed Data
+
+![Data](assets/transformed-data.png)
