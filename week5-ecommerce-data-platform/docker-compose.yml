@@ -1,0 +1,204 @@
+version: "3.8"
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    # Project specific
+    POSTGRES_HOST: ${POSTGRES_HOST}
+    POSTGRES_PORT: ${POSTGRES_PORT}
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    POSTGRES_DB: ${POSTGRES_DB}
+    MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    MINIO_BUCKET: ${MINIO_BUCKET}
+    KAGGLE_USERNAME: ${KAGGLE_USERNAME}
+    KAGGLE_KEY: ${KAGGLE_KEY}
+    CURRENCY_API_BASE_URL: ${CURRENCY_API_BASE_URL}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./src:/opt/airflow/src
+    - ./sql:/opt/airflow/sql
+    - ./data:/opt/airflow/data
+    - ./seed_data:/opt/airflow/seed_data
+    - ./scripts:/opt/airflow/scripts
+  user: "${AIRFLOW_UID}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+
+services:
+  # PostgreSQL - Analytics Warehouse + Airflow Metadata
+  postgres:
+    image: postgres:16
+    container_name: ecommerce_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Extra DB for our analytics warehouse
+      POSTGRES_MULTIPLE_DATABASES: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+    restart: always
+
+  # MinIO - S3-compatible Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: ecommerce_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+
+  # MinIO Bootstrap - Create bucket + upload seed data
+  minio-init:
+    image: minio/mc:latest
+    container_name: ecommerce_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      set -e;
+      echo '>>> Waiting for MinIO...';
+      sleep 5;
+      mc alias set local http://$${MINIO_ENDPOINT} $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      echo '>>> Creating bucket...';
+      mc mb -p local/$${MINIO_BUCKET} || true;
+      echo '>>> Uploading seed data...';
+      mc cp --recursive /seed_data/ local/$${MINIO_BUCKET}/ || true;
+      echo '>>> MinIO bootstrap completed successfully';
+      exit 0;
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    volumes:
+      - ./seed_data:/seed_data:ro
+    restart: "no"
+
+  # Airflow Init (DB upgrade + create user)
+  airflow-init:
+    <<: *airflow-common
+    container_name: ecommerce_airflow_init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /sources/logs /sources/dags /sources/plugins
+        chown -R "${AIRFLOW_UID}:0" /sources/{logs,dags,plugins}
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD}
+    user: "0:0"
+    volumes:
+      - ./dags:/sources/dags
+      - ./logs:/sources/logs
+      - ./plugins:/sources/plugins
+    restart: "no"
+
+  # Airflow Webserver
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: ecommerce_airflow_webserver
+    command: webserver
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: ecommerce_airflow_scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Streamlit Dashboard
+  streamlit:
+    image: python:3.11-slim
+    container_name: ecommerce_streamlit
+    working_dir: /app
+    command: >
+      bash -c "pip install --no-cache-dir streamlit plotly pandas psycopg2-binary sqlalchemy python-dotenv &&
+               streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0"
+    ports:
+      - "8501:8501"
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./dashboard:/app/dashboard
+      - ./src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  default:
+    name: ecommerce_network

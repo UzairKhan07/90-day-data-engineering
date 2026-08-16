@@ -1,0 +1,39 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# airflow / local runtime
+logs/
+*.log
+airflow.db
+
+# data (large / regenerable)
+data/raw/
+seed_data/**/*.csv
+!seed_data/**/.gitkeep
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# build / cache
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/

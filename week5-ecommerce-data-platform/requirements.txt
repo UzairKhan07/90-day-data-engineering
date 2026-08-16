@@ -1,0 +1,33 @@
+# Airflow & providers
+apache-airflow==2.9.3
+apache-airflow-providers-postgres==5.12.0
+apache-airflow-providers-amazon==8.28.0
+
+# Database
+psycopg2-binary==2.9.9
+SQLAlchemy==1.4.53
+
+# Data processing
+polars==1.5.0
+pandas==2.2.2
+pyarrow==17.0.0
+
+# Object storage (MinIO / S3)
+boto3==1.34.162
+minio==7.2.7
+
+# APIs / HTTP
+requests==2.32.3
+httpx==0.27.0
+
+# Kaggle download
+kaggle==1.6.17
+
+# Config / utils
+python-dotenv==1.0.1
+pydantic==2.8.2
+tenacity==8.5.0
+
+# Dashboard (if used in image; Streamlit service may install separately)
+streamlit==1.37.1
+plotly==5.23.0
