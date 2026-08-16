@@ -172,8 +172,6 @@ docker compose down -v
 
 The raw e-commerce data is downloaded at runtime from the [Synthetic U.S. E-Commerce Dataset (1M Orders) on Kaggle](https://www.kaggle.com/datasets/limjeongeun/synthetic-u-s-e-commerce-dataset-1m-orders). Currency rates are sourced from the [Frankfurter API](https://www.frankfurter.app/).
 
-## License
 
-This project was created as a Week 5 data-engineering project. Add a license before using or distributing it beyond its intended educational purpose.
 
 
